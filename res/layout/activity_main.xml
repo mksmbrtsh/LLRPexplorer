@@ -7,6 +7,15 @@
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
     tools:context="maximsblog.blogspot.com.llrpexplorer.ActivityMain" >
+ <Switch
+        android:id="@+id/toggleButton1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentTop="true"
+        android:layout_margin="10dp"
+        android:textOff="Disconnect"
+        android:textOn="Connect" />
 
     <TextView
         android:id="@+id/t"
@@ -15,9 +24,16 @@
         android:layout_alignParentBottom="true"
         android:layout_alignParentLeft="true"
         android:layout_alignParentRight="true"
+        android:layout_below="@+id/toggleButton1"
+        android:scrollbars="vertical"
+        android:singleLine="false" />
+
+    <Button
+        android:id="@+id/exec"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentRight="true"
         android:layout_alignParentTop="true"
-        android:singleLine="false"
-		android:scrollbars = "vertical"
-        android:text="@string/hello_world" />
+        android:text="READ" />
 
 </RelativeLayout>

@@ -3,10 +3,16 @@ package maximsblog.blogspot.com.llrpexplorer;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
+import maximsblog.blogspot.com.llrpexplorer.ReaderService.IntentDo;
+
 import org.llrp.ltk.exceptions.InvalidLLRPMessageException;
+import org.llrp.ltk.generated.LLRPMessageFactory;
 import org.llrp.ltk.generated.enumerations.AISpecStopTriggerType;
+import org.llrp.ltk.generated.enumerations.AccessReportTriggerType;
 import org.llrp.ltk.generated.enumerations.AirProtocols;
 import org.llrp.ltk.generated.enumerations.GetReaderCapabilitiesRequestedData;
+import org.llrp.ltk.generated.enumerations.NotificationEventType;
+import org.llrp.ltk.generated.enumerations.ROReportTriggerType;
 import org.llrp.ltk.generated.enumerations.ROSpecStartTriggerType;
 import org.llrp.ltk.generated.enumerations.ROSpecState;
 import org.llrp.ltk.generated.enumerations.ROSpecStopTriggerType;
@@ -20,21 +26,33 @@ import org.llrp.ltk.generated.messages.GET_READER_CAPABILITIES_RESPONSE;
 import org.llrp.ltk.generated.messages.GET_READER_CONFIG;
 import org.llrp.ltk.generated.messages.READER_EVENT_NOTIFICATION;
 import org.llrp.ltk.generated.messages.RO_ACCESS_REPORT;
+import org.llrp.ltk.generated.messages.SET_READER_CONFIG;
 import org.llrp.ltk.generated.messages.START_ROSPEC;
 import org.llrp.ltk.generated.messages.START_ROSPEC_RESPONSE;
 import org.llrp.ltk.generated.messages.STOP_ROSPEC;
+import org.llrp.ltk.generated.messages.STOP_ROSPEC_RESPONSE;
 import org.llrp.ltk.generated.parameters.AISpec;
 import org.llrp.ltk.generated.parameters.AISpecStopTrigger;
+import org.llrp.ltk.generated.parameters.AccessReportSpec;
+import org.llrp.ltk.generated.parameters.C1G2EPCMemorySelector;
+import org.llrp.ltk.generated.parameters.ConnectionAttemptEvent;
+import org.llrp.ltk.generated.parameters.EventNotificationState;
 import org.llrp.ltk.generated.parameters.InventoryParameterSpec;
 import org.llrp.ltk.generated.parameters.ROBoundarySpec;
+import org.llrp.ltk.generated.parameters.ROReportSpec;
 import org.llrp.ltk.generated.parameters.ROSpec;
 import org.llrp.ltk.generated.parameters.ROSpecStartTrigger;
 import org.llrp.ltk.generated.parameters.ROSpecStopTrigger;
 import org.llrp.ltk.generated.parameters.ReaderEventNotificationData;
+import org.llrp.ltk.generated.parameters.ReaderEventNotificationSpec;
+import org.llrp.ltk.generated.parameters.TagReportContentSelector;
 import org.llrp.ltk.generated.parameters.TagReportData;
+import org.llrp.ltk.net.LLRPConnection;
 import org.llrp.ltk.net.LLRPConnectionAttemptFailedException;
 import org.llrp.ltk.net.LLRPConnector;
 import org.llrp.ltk.net.LLRPEndpoint;
+import org.llrp.ltk.types.Bit;
+import org.llrp.ltk.types.LLRPBitList;
 import org.llrp.ltk.types.LLRPMessage;
 import org.llrp.ltk.types.UnsignedByte;
 import org.llrp.ltk.types.UnsignedInteger;
@@ -42,174 +60,62 @@ import org.llrp.ltk.types.UnsignedShort;
 import org.llrp.ltk.types.UnsignedShortArray;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.StrictMode;
 import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
+import android.widget.Switch;
 import android.widget.TextView;
 
-public class ActivityMain extends Activity {
+public class ActivityMain extends Activity implements OnClickListener {
 
-	private static final int ROSPEC_ID = 1;
+	private IntentFilter mIntentFilter;
+	private TextView t;
+	private Switch mToggleConnectSwitch;
+	private Button mButton;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
-		final TextView t = (TextView) findViewById(R.id.t);
+		mIntentFilter = new IntentFilter();
+		mIntentFilter.addAction(ReaderService.IntentDo.connect.toString());
+		mIntentFilter.addAction(ReaderService.IntentDo.message.toString());
+		mIntentFilter.addAction(ReaderService.IntentDo.error.toString());
+		mIntentFilter.addAction(ReaderService.IntentDo.connectionError
+				.toString());
+		mIntentFilter.addAction(ReaderService.IntentDo.disconnect.toString());
+
+		t = (TextView) findViewById(R.id.t);
 		t.setMovementMethod(new ScrollingMovementMethod());
-
-		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder()
-				.permitAll().build();
-
-		StrictMode.setThreadPolicy(policy);
-
-		final LLRPConnector c = new LLRPConnector(new LLRPEndpoint() {
-
-			@Override
-			public void messageReceived(final LLRPMessage message) {
-				runOnUiThread(new Runnable() {
-					public void run() {
-						if (message instanceof READER_EVENT_NOTIFICATION) {
-							READER_EVENT_NOTIFICATION readerEventNotification = ((READER_EVENT_NOTIFICATION) message);
-							ReaderEventNotificationData red = readerEventNotification
-									.getReaderEventNotificationData();
-							if (red.getConnectionAttemptEvent() != null) {
-								t.setText(t.getText().toString() + "\n"
-										+ "Connection attempt was successful");
-							} else {
-								t.setText(t.getText().toString() + "\n"
-										+ "Connection attempt was unsucessful");
-							}
-							
-						} else if(message instanceof GET_READER_CAPABILITIES_RESPONSE) {
-							GET_READER_CAPABILITIES_RESPONSE getReaderCap = (GET_READER_CAPABILITIES_RESPONSE) message;
-							UnsignedShort maxNumberOfAntennaSupported = getReaderCap.getGeneralDeviceCapabilities().getMaxNumberOfAntennaSupported();
-							t.setText(t.getText().toString() + "\nmaxNumberOfAntennaSupported: " + maxNumberOfAntennaSupported);
-						} else if(message instanceof START_ROSPEC_RESPONSE) {
-							START_ROSPEC_RESPONSE startRospecResponse = (START_ROSPEC_RESPONSE) message;
-							t.setText(t.getText().toString() + "\n" + startRospecResponse.getName());
-						} else if(message instanceof RO_ACCESS_REPORT) {
-							RO_ACCESS_REPORT roAccessReport = (RO_ACCESS_REPORT) message;
-							List<TagReportData> l = roAccessReport.getTagReportDataList();
-							for(TagReportData trd : l)
-								t.setText(t.getText().toString() + "\n" + trd.getEPCParameter().toString());
-						} else {
-							t.setText(t.getText().toString() + "\n" + message.getName());
-						}
-					}
-				});
-
-			}
-
-			@Override
-			public void errorOccured(final String message) {
-				runOnUiThread(new Runnable() {
-					public void run() {
-						t.setText(t.getText().toString() + "\n"
-								+ message.toString());
-					}
-				});
-			}
-		}, "192.168.6.190");
-		try {
-			c.connect();
-			c.
-			GET_READER_CAPABILITIES getReaderCap = new GET_READER_CAPABILITIES();
-			getReaderCap.setRequestedData(new GetReaderCapabilitiesRequestedData(
-					GetReaderCapabilitiesRequestedData.All));
-			c.send(getReaderCap);
-			ENABLE_EVENTS_AND_REPORTS report = new ENABLE_EVENTS_AND_REPORTS();
-			c.send(report);
-			//CREATE an ADD_ROSPEC Message and send it to the reader
-			ADD_ROSPEC addROSpec = new ADD_ROSPEC();
-			addROSpec.setROSpec(createROSpec());
-			c.send(addROSpec);
-			ENABLE_ROSPEC enableROSpec = new ENABLE_ROSPEC();
-			enableROSpec.setROSpecID(new UnsignedInteger(ROSPEC_ID));
-			c.send(enableROSpec);
-			START_ROSPEC startROSpec = new START_ROSPEC();
-			startROSpec.setROSpecID(new UnsignedInteger(ROSPEC_ID));
-			c.send(startROSpec);
-			
-			t.postDelayed(new Runnable() {
-				
-				@Override
-				public void run() {
-					//Create a STOP_ROSPEC message and send it to the reader
-					STOP_ROSPEC stopROSpec = new STOP_ROSPEC();
-					stopROSpec.setROSpecID(new UnsignedInteger(ROSPEC_ID));
-					c.send(stopROSpec);
-
-					//Create a DISABLE_ROSPEC message and send it to the reader
-					DISABLE_ROSPEC disableROSpec = new DISABLE_ROSPEC();
-					disableROSpec.setROSpecID(new UnsignedInteger(ROSPEC_ID));
-					c.send(disableROSpec);
-
-					//Create a DELTE_ROSPEC message and send it to the reader
-					DELETE_ROSPEC deleteROSpec = new DELETE_ROSPEC();
-					deleteROSpec.setROSpecID(new UnsignedInteger(ROSPEC_ID));
-					c.send(deleteROSpec);
-					c.disconnect();
-					t.setText(t.getText().toString() + "\n"
-							+ "Disconnected");
-				}
-			}, 10000);
-		} catch (LLRPConnectionAttemptFailedException e) {
-			t.setText(t.getText().toString() + "\n"
-					+ e.toString());
-		}
+		mButton = (Button) findViewById(R.id.exec);
+		mButton.setOnClickListener(this);
+		mButton.setEnabled(false);
+		mToggleConnectSwitch = (Switch) findViewById(R.id.toggleButton1);
+		mToggleConnectSwitch.setOnClickListener(this);
 	}
 
-	private ROSpec createROSpec() {
-		//create a new rospec
-				ROSpec roSpec = new ROSpec();
-				roSpec.setPriority(new UnsignedByte(0));
-				roSpec.setCurrentState(new ROSpecState(ROSpecState.Disabled));
-				roSpec.setROSpecID(new UnsignedInteger(ROSPEC_ID));
-
-				//set up ROBoundary (start and stop triggers)
-				ROBoundarySpec roBoundarySpec = new ROBoundarySpec();
-
-				ROSpecStartTrigger startTrig = new ROSpecStartTrigger();
-				startTrig.setROSpecStartTriggerType(new ROSpecStartTriggerType(
-						ROSpecStartTriggerType.Null));
-				roBoundarySpec.setROSpecStartTrigger(startTrig);
-
-				ROSpecStopTrigger stopTrig = new ROSpecStopTrigger();
-				stopTrig.setDurationTriggerValue(new UnsignedInteger(0));
-				stopTrig.setROSpecStopTriggerType(new ROSpecStopTriggerType(
-						ROSpecStopTriggerType.Null));
-				roBoundarySpec.setROSpecStopTrigger(stopTrig);
-
-				roSpec.setROBoundarySpec(roBoundarySpec);
-
-				//Add an AISpec
-				AISpec aispec = new AISpec();
-				
-				//set AI Stop trigger to null
-				AISpecStopTrigger aiStopTrigger = new AISpecStopTrigger();
-				aiStopTrigger.setAISpecStopTriggerType(new AISpecStopTriggerType(
-						AISpecStopTriggerType.Null));
-				aiStopTrigger.setDurationTrigger(new UnsignedInteger(0));
-				aispec.setAISpecStopTrigger(aiStopTrigger);
-
-				UnsignedShortArray antennaIDs = new UnsignedShortArray();
-				antennaIDs.add(new UnsignedShort(4));
-				aispec.setAntennaIDs(antennaIDs);
-
-				InventoryParameterSpec inventoryParam = new InventoryParameterSpec();
-				inventoryParam.setProtocolID(new AirProtocols(
-						AirProtocols.EPCGlobalClass1Gen2));
-				inventoryParam.setInventoryParameterSpecID(new UnsignedShort(1));
-				aispec.addToInventoryParameterSpecList(inventoryParam);
-
-				roSpec.addToSpecParameterList(aispec);
-				
-				return roSpec;
+	@Override
+	public void onResume() {
+		super.onStart();
+		registerReceiver(mIntentReceiver, mIntentFilter);
 	}
+
+	@Override
+	public void onPause() {
+		super.onStop();
+		if (mIntentReceiver != null)
+			unregisterReceiver(mIntentReceiver);
+	};
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
@@ -229,4 +135,107 @@ public class ActivityMain extends Activity {
 		}
 		return super.onOptionsItemSelected(item);
 	}
+
+	private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			if (intent != null) {
+				if (intent.getAction().equals(
+						ReaderService.IntentDo.message.toString())) {
+					try {
+						LLRPMessage message = LLRPMessageFactory
+								.createLLRPMessage(new LLRPBitList(intent
+										.getStringExtra("msg")));
+						updateUI(message);
+					} catch (InvalidLLRPMessageException e) {
+						e.printStackTrace();
+					}
+				} else if (intent.getAction().equals(
+						ReaderService.IntentDo.error.toString())) {
+					String message = intent.getStringExtra("error");
+					t.setText(t.getText().toString() + "\n" + message);
+				} else if (intent.getAction().equals(
+						ReaderService.IntentDo.connectionError.toString())) {
+					t.setText(t.getText().toString() + "\n"
+							+ "connection error");
+					mButton.setEnabled(false);
+					mToggleConnectSwitch.setOnClickListener(null);
+					mToggleConnectSwitch.setChecked(false);
+					mToggleConnectSwitch.setEnabled(true);
+					mToggleConnectSwitch.setOnClickListener(ActivityMain.this);
+				}
+			}
+		}
+	};
+
+	@Override
+	public void onClick(View v) {
+		if (v.getId() == R.id.toggleButton1) {
+			Intent service;
+			service = new Intent(this, ReaderService.class);
+			if (!mToggleConnectSwitch.isChecked()) {
+				service.putExtra("IntentDo", IntentDo.disconnect);
+			} else {
+				service.putExtra("IntentDo", IntentDo.connect);
+			}
+			mToggleConnectSwitch.setEnabled(true);
+			startService(service);
+		} else {
+			Intent service = new Intent(this, ReaderService.class);
+			service.putExtra("IntentDo", IntentDo.read);
+			startService(service);
+		}
+	}
+
+	private void updateUI(LLRPMessage message) {
+		if (message instanceof READER_EVENT_NOTIFICATION) {
+			READER_EVENT_NOTIFICATION readerEventNotification = ((READER_EVENT_NOTIFICATION) message);
+			ReaderEventNotificationData red = readerEventNotification
+					.getReaderEventNotificationData();
+			if (red.getAISpecEvent() == null && red.getAntennaEvent() == null
+					&& red.getConnectionCloseEvent() == null
+					&& red.getGPIEvent() == null
+					&& red.getHoppingEvent() == null
+					&& red.getReaderExceptionEvent() == null
+					&& red.getReportBufferLevelWarningEvent() == null
+					&& red.getReportBufferOverflowErrorEvent() == null
+					&& red.getRFSurveyEvent() == null
+					&& red.getROSpecEvent() == null) {
+				if (red.getConnectionAttemptEvent() != null) {
+					t.setText(t.getText().toString() + "\n"
+							+ "Connection attempt was successful");
+					mButton.setEnabled(true);
+				} else {
+					t.setText(t.getText().toString() + "\n"
+							+ "Connection attempt was unsucessful");
+					mButton.setEnabled(false);
+				}
+				mToggleConnectSwitch.setEnabled(true);
+			} else {
+				//t.setText(t.getText().toString() + "\n"
+				//		+ readerEventNotification.toString());
+			}
+		} else if (message instanceof GET_READER_CAPABILITIES_RESPONSE) {
+			GET_READER_CAPABILITIES_RESPONSE getReaderCap = (GET_READER_CAPABILITIES_RESPONSE) message;
+			UnsignedShort maxNumberOfAntennaSupported = getReaderCap
+					.getGeneralDeviceCapabilities()
+					.getMaxNumberOfAntennaSupported();
+			t.setText(t.getText().toString()
+					+ "\nmaxNumberOfAntennaSupported: "
+					+ maxNumberOfAntennaSupported);
+		} else if (message instanceof START_ROSPEC_RESPONSE) {
+		} else if (message instanceof RO_ACCESS_REPORT) {
+			RO_ACCESS_REPORT roAccessReport = (RO_ACCESS_REPORT) message;
+			List<TagReportData> l = roAccessReport.getTagReportDataList();
+			for (TagReportData trd : l)
+				t.setText(t.getText().toString() + "\n"
+						+ trd.getEPCParameter().toString());
+		}
+		if (message instanceof STOP_ROSPEC_RESPONSE) {
+
+		} else {
+
+		}
+	}
+
 }

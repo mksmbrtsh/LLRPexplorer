@@ -15,7 +15,7 @@ public class Logger {
 	}
 	
 	public void warn(String msg){
-		Log.w(mTag, msg);
+		Log.d(mTag, msg);
 	}
 	public void info(String msg){
 		Log.i(mTag, msg);
