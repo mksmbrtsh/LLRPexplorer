@@ -76,6 +76,8 @@ public class ReaderService extends Service {
 
 	@Override
 	public int onStartCommand(final Intent intent, int flags, int startId) {
+		if (intent == null)
+			return START_STICKY;
 		if (mLLRPConnector == null) {
 			SharedPreferences prefs = getSharedPreferences("ReaderConfig",
 					MODE_PRIVATE);
