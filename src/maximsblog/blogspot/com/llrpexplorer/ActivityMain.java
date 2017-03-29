@@ -67,7 +67,10 @@ import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.StrictMode;
+import android.text.Html;
+import android.text.method.LinkMovementMethod;
 import android.text.method.ScrollingMovementMethod;
+import android.text.util.Linkify;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -102,6 +105,10 @@ public class ActivityMain extends Activity implements OnClickListener {
 		mButton.setEnabled(false);
 		mToggleConnectSwitch = (Switch) findViewById(R.id.toggleButton1);
 		mToggleConnectSwitch.setOnClickListener(this);
+		TextView textAbout = (TextView)findViewById(R.id.textView1);
+		textAbout.setText(getResources().getText(R.string.about_text));
+		Linkify.addLinks(textAbout, Linkify.ALL);
+		textAbout.setMovementMethod(LinkMovementMethod.getInstance());
 	}
 
 	@Override
@@ -116,25 +123,6 @@ public class ActivityMain extends Activity implements OnClickListener {
 		if (mIntentReceiver != null)
 			unregisterReceiver(mIntentReceiver);
 	};
-
-	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		// Inflate the menu; this adds items to the action bar if it is present.
-		getMenuInflater().inflate(R.menu.activity_main, menu);
-		return true;
-	}
-
-	@Override
-	public boolean onOptionsItemSelected(MenuItem item) {
-		// Handle action bar item clicks here. The action bar will
-		// automatically handle clicks on the Home/Up button, so long
-		// as you specify a parent activity in AndroidManifest.xml.
-		int id = item.getItemId();
-		if (id == R.id.action_settings) {
-			return true;
-		}
-		return super.onOptionsItemSelected(item);
-	}
 
 	private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
 		@Override
@@ -227,6 +215,10 @@ public class ActivityMain extends Activity implements OnClickListener {
 		} else if (message instanceof RO_ACCESS_REPORT) {
 			RO_ACCESS_REPORT roAccessReport = (RO_ACCESS_REPORT) message;
 			List<TagReportData> l = roAccessReport.getTagReportDataList();
+			if(l == null || l.isEmpty()) {
+				t.setText(t.getText().toString() + "\n"
+						+ "Tag not found");
+			}
 			for (TagReportData trd : l)
 				t.setText(t.getText().toString() + "\n"
 						+ trd.getEPCParameter().toString());
